@@ -26,12 +26,11 @@ methodmap ProjDetect
 	/**
 	 * constructor
 	 */
-	public ProjDetect (int index)
-	{
-		if ( IsValidClient(index) ) {
-			return view_as<ProjDetect>( GetClientUserId(index) );
+	public ProjDetect (int index, bool uid = false) {
+		if (uid) {
+			return view_as<ProjDetect>( index );
 		}
-		return view_as<ProjDetect>(-1);
+		return view_as<ProjDetect>( GetClientUserId(index) );
 	}
 
 	/**
@@ -148,7 +147,6 @@ methodmap ProjDetect
 
 		float front = GetVectorDotProduct(vecDelta, vecforward);
 		float side = GetVectorDotProduct(vecDelta, right);
-
 		/*
 			this is part of original c++ code. unfortunately, it didn't work right.
 			it made the indicators appear to the side when a projectile was RIGHT IN FRONT OF PLAYER...
@@ -184,7 +182,7 @@ ConVar PluginEnabled,
 	DetectFriendly
 ;
 
-public void OnPluginStart () //be a rebel and detach parameter parenthesis from func name 
+public void OnPluginStart () //be a rebel and detach parameter parenthesis from func name !
 {
 	PluginEnabled = CreateConVar("projindic_enabled", "1", "Enable Projectile Indicator plugin", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 
@@ -200,6 +198,7 @@ public void OnPluginStart () //be a rebel and detach parameter parenthesis from 
 
 	//RegAdminCmd("sm_command", CommandTemplate, ADMFLAG_SLAY, "AdminCommandTemplate");
 	RegConsoleCmd("sm_detect", ToggleIndicator);
+	RegConsoleCmd("sm_indic", ToggleIndicator);
 	RegConsoleCmd("sm_forcedetecton", ForceDetection);
 
 	AutoExecConfig(true, "Projectile-Indicator");
@@ -210,17 +209,23 @@ public void OnPluginStart () //be a rebel and detach parameter parenthesis from 
 		OnClientPutInServer(i);
 	}
 }
+
 public void OnClientPutInServer (int client)
 {
-	SDKHook(client, SDKHook_PostThinkPost, BarBarKhashab);
+	ProjDetect player = ProjDetect(client);
+	player.bDetect = false;
+	//SDKHook(client, SDKHook_PostThinkPost, BarBarKhashab);
+	CreateTimer(0.1, TimerIndicatorThink, player.userid, TIMER_REPEAT);
 }
 
-public void BarBarKhashab (int client)
+public Action TimerIndicatorThink (Handle timer, any userid)
 {
-	if ( not PluginEnabled.BoolValue ) return;
+	if ( not PluginEnabled.BoolValue ) return Plugin_Continue;
 
-	ProjDetect player = ProjDetect(client);
-	if ( not player.bDetect ) return;
+	ProjDetect player = ProjDetect(userid, true);
+	if ( not player.bDetect ) return Plugin_Continue;
+
+	if ( not IsPlayerAlive(player.index) or IsClientObserver(player.index) ) return Plugin_Continue;
 
 	float screenx, screeny;
 	float vecGrenDelta[3], vecStickyDelta[3];
@@ -236,7 +241,7 @@ public void BarBarKhashab (int client)
 			}
 
 			thrower = GetThrower(EntRefToEntIndex(entref));
-			if ( GetClientTeam(thrower) eq GetClientTeam(client) and not DetectFriendly.BoolValue )
+			if ( GetClientTeam(thrower) eq GetClientTeam(player.index) and not DetectFriendly.BoolValue )
 			{
 				continue;
 			}
@@ -257,7 +262,7 @@ public void BarBarKhashab (int client)
 			}
 
 			thrower = GetThrower(EntRefToEntIndex(entref));
-			if ( GetClientTeam(thrower) eq GetClientTeam(client) and not DetectFriendly.BoolValue ) {
+			if ( GetClientTeam(thrower) eq GetClientTeam(player.index) and not DetectFriendly.BoolValue ) {
 				continue;
 			}
 
@@ -267,24 +272,15 @@ public void BarBarKhashab (int client)
 			player.DrawIndicator(screenx, screeny, "X");
 		}
 	}
-	return;
+	return Plugin_Continue;
 }
-/* save for later
-public void OnEntityCreated(int entity, const char[] classname)
-{
-	if ( not PluginEnabled.BoolValue ) return;
-
-	if ( !strcmp(classname, "tf_projectile_pipe", false) ) {
-		SDKHook(entity, SDKHook_SpawnPost, OnEggBombSpawned);
-	}
-}
-*/
 public Action ToggleIndicator (int client, int args)
 {
 	if ( not PluginEnabled.BoolValue ) return Plugin_Continue;
 
 	ProjDetect player = ProjDetect(client);
-	player.bDetect = not player.bDetect;
+	player.bDetect = true; //not player.bDetect;
+	ReplyToCommand(player.index, "Projectile Indicator on");
 	return Plugin_Handled;
 }
 public Action ForceDetection (int client, int args) //forces players to become the tank class regardless of team cvars
@@ -296,8 +292,7 @@ public Action ForceDetection (int client, int args) //forces players to become t
 			ReplyToCommand(client, "[Projectile Indicator] Usage: sm_forcedetecton <player/target>");
 			return Plugin_Handled;
 		}
-		char name[PLATFORM_MAX_PATH];
-		GetCmdArg(1, name, sizeof(name));
+		char name[PLATFORM_MAX_PATH]; GetCmdArg(1, name, sizeof(name));
 
 		char target_name[MAX_TARGET_LENGTH];
 		int target_list[PLYR], target_count;
@@ -317,6 +312,7 @@ public Action ForceDetection (int client, int args) //forces players to become t
 				player.bDetect = true;
 			}
 		}
+		ReplyToCommand(client, "Forcing Projectile Indicators");
 	}
 	return Plugin_Continue;
 }
