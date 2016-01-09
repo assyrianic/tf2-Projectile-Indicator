@@ -8,7 +8,6 @@
 #pragma newdecls		required
 
 #define PLUGIN_VERSION		"1.0"
-
 #define IsClientValid(%1)	( 0 < %1 and %1 <= MaxClients )
 
 public Plugin myinfo = { //registers plugin
@@ -20,6 +19,17 @@ public Plugin myinfo = { //registers plugin
 };
 
 bool benabled[PLYR];
+
+float screenx,
+	screeny,
+	vecGrenDelta[3],
+	vecStickyDelta[3]
+;
+
+int iEntity = -1,
+	refentity,
+	thrower //make variables OUTSIDE loop
+;
 
 methodmap ProjDetect
 {
@@ -50,6 +60,14 @@ methodmap ProjDetect
 		public set(bool val)			{ benabled[ this.index ] = val; }
 	}
 
+	public bool IsAlive ()
+	{
+		return IsPlayerAlive(this.index);
+	}
+	public bool IsSpectator ()
+	{
+		return IsClientObserver(this.index);
+	}
 	/**
 	 * Displays the Projectile indicator to alert player of nearly projectiles
 	 *
@@ -75,13 +93,12 @@ methodmap ProjDetect
 		|			1.0				|
 		|-------------------------------------------------------|
 */
-	public void DrawIndicator ( float xpos, float ypos, char[] textc )
+	public void DrawIndicator ( float xpos, float ypos, char[] textc ) //be a rebel! Detach parameter parens from func name !
 	{
-		Handle indicator = CreateHudSynchronizer();
-		if ( not indicator ) return;
-
+		//Handle HUDindicator = CreateHudSynchronizer();
 		SetHudTextParams(xpos, ypos, 0.1, 255, 100, 0, 255, 0, 0.35, 0.0, 0.1); //orange color for visibility
-		ShowSyncHudText(this.index, indicator, textc);
+		//ShowSyncHudText(this.index, HUDindicator, textc);
+		ShowHudText(this.index, -1, textc);
 	}
 
 	/**
@@ -182,7 +199,7 @@ ConVar PluginEnabled,
 	DetectFriendly
 ;
 
-public void OnPluginStart () //be a rebel and detach parameter parenthesis from func name !
+public void OnPluginStart () //be a rebel! Detach parameter parens from func name !
 {
 	PluginEnabled = CreateConVar("projindic_enabled", "1", "Enable Projectile Indicator plugin", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 
@@ -194,12 +211,13 @@ public void OnPluginStart () //be a rebel and detach parameter parenthesis from 
 
 	DetectStickyRadius = CreateConVar("projindic_stickyradius", "300.0", "Detection radius for stickybombs in Hammer Units", FCVAR_PLUGIN, true, 0.0, true, 99999.0);
 
-	DetectFriendly = CreateConVar("projindic_detectfriendly", "1", "Detect friendly projectiles", FCVAR_PLUGIN, true, 0.0, true, 1.0);
+	DetectFriendly = CreateConVar("projindic_detectfriendly", "0", "Detect friendly projectiles", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 
 	//RegAdminCmd("sm_command", CommandTemplate, ADMFLAG_SLAY, "AdminCommandTemplate");
 	RegConsoleCmd("sm_detect", ToggleIndicator);
 	RegConsoleCmd("sm_indic", ToggleIndicator);
-	RegConsoleCmd("sm_forcedetecton", ForceDetection);
+	RegConsoleCmd("sm_forcedetect", ForceDetection);
+	RegConsoleCmd("sm_forcedetection", ForceDetection);
 
 	AutoExecConfig(true, "Projectile-Indicator");
 
@@ -213,39 +231,34 @@ public void OnPluginStart () //be a rebel and detach parameter parenthesis from 
 public void OnClientPutInServer (int client)
 {
 	ProjDetect player = ProjDetect(client);
-	player.bDetect = false;
-	//SDKHook(client, SDKHook_PostThinkPost, BarBarKhashab);
-	CreateTimer(0.1, TimerIndicatorThink, player.userid, TIMER_REPEAT);
+	player.bDetect = true;
+	SDKHook(client, SDKHook_PostThinkPost, IndicatorThink);
+	//CreateTimer(0.1, TimerIndicatorThink, player.userid, TIMER_REPEAT);
 }
-
-public Action TimerIndicatorThink (Handle timer, any userid)
+public void IndicatorThink (int client)
 {
-	if ( not PluginEnabled.BoolValue ) return Plugin_Continue;
+	if ( not PluginEnabled.BoolValue ) return ;
 
-	ProjDetect player = ProjDetect(userid, true);
-	if ( not player.bDetect ) return Plugin_Continue;
+	ProjDetect player = ProjDetect(client);
+	if ( not player.bDetect ) return ;
 
-	if ( not IsPlayerAlive(player.index) or IsClientObserver(player.index) ) return Plugin_Continue;
+	if ( not IsPlayerAlive(player.index) or IsClientObserver(player.index) ) return ;
 
-	float screenx, screeny;
-	float vecGrenDelta[3], vecStickyDelta[3];
-
-	int iEntity = -1, entref, thrower; //make variables OUTSIDE loop
 	if (DetectGrenades.BoolValue)
 	{
 		while ( (iEntity = FindEntityByClassname2(iEntity, "tf_projectile_pipe")) not_eq -1 )
 		{
-			entref = EntIndexToEntRef(iEntity);
-			if ( player.GetDistFromProj(entref) > DetectGrenadeRadius.FloatValue ) {
+			refentity = EntIndexToEntRef(iEntity);
+			if ( player.GetDistFromProj(refentity) > DetectGrenadeRadius.FloatValue ) {
 				continue;
 			}
 
-			thrower = GetThrower(EntRefToEntIndex(entref));
+			thrower = GetThrower(EntRefToEntIndex(refentity));
 			if ( GetClientTeam(thrower) eq GetClientTeam(player.index) and not DetectFriendly.BoolValue )
 			{
 				continue;
 			}
-			player.GetDeltaVector(entref, vecGrenDelta);
+			player.GetDeltaVector(refentity, vecGrenDelta);
 			NormalizeVector(vecGrenDelta, vecGrenDelta);
 			player.GetProjPosToScreen(vecGrenDelta, screenx, screeny);
 			player.DrawIndicator(screenx, screeny, "O");
@@ -256,24 +269,25 @@ public Action TimerIndicatorThink (Handle timer, any userid)
 	{
 		while ( (iEntity = FindEntityByClassname2(iEntity, "tf_projectile_pipe_remote")) not_eq -1 )
 		{
-			entref = EntIndexToEntRef(iEntity);
-			if ( player.GetDistFromProj(entref) > DetectStickyRadius.FloatValue ) {
+			refentity = EntIndexToEntRef(iEntity);
+			if ( player.GetDistFromProj(refentity) > DetectStickyRadius.FloatValue ) {
 				continue;
 			}
 
-			thrower = GetThrower(EntRefToEntIndex(entref));
+			thrower = GetThrower(EntRefToEntIndex(refentity));
 			if ( GetClientTeam(thrower) eq GetClientTeam(player.index) and not DetectFriendly.BoolValue ) {
 				continue;
 			}
 
-			player.GetDeltaVector(entref, vecStickyDelta);
-			NormalizeVector(vecGrenDelta, vecGrenDelta);
+			player.GetDeltaVector(refentity, vecStickyDelta);
+			NormalizeVector(vecStickyDelta, vecStickyDelta);
 			player.GetProjPosToScreen(vecStickyDelta, screenx, screeny);
 			player.DrawIndicator(screenx, screeny, "X");
 		}
 	}
-	return Plugin_Continue;
+	return ;
 }
+
 public Action ToggleIndicator (int client, int args)
 {
 	if ( not PluginEnabled.BoolValue ) return Plugin_Continue;
@@ -289,7 +303,7 @@ public Action ForceDetection (int client, int args) //forces players to become t
 	{
 		if (args < 1)
 		{
-			ReplyToCommand(client, "[Projectile Indicator] Usage: sm_forcedetecton <player/target>");
+			ReplyToCommand(client, "[Projectile Indicator] Usage: sm_forcedetect <player/target>");
 			return Plugin_Handled;
 		}
 		char name[PLATFORM_MAX_PATH]; GetCmdArg(1, name, sizeof(name));
