@@ -7,7 +7,7 @@
 #pragma semicolon		1
 #pragma newdecls		required
 
-#define PLUGIN_VERSION		"1.0"
+#define PLUGIN_VERSION		"1.1"
 #define IsClientValid(%1)	( 0 < %1 and %1 <= MaxClients )
 
 public Plugin myinfo = { //registers plugin
@@ -19,17 +19,6 @@ public Plugin myinfo = { //registers plugin
 };
 
 bool benabled[PLYR];
-
-float screenx,
-	screeny,
-	vecGrenDelta[3],
-	vecStickyDelta[3]
-;
-
-int iEntity = -1,
-	refentity,
-	thrower //make variables OUTSIDE loop
-;
 
 methodmap ProjDetect
 {
@@ -243,6 +232,17 @@ public void IndicatorThink (int client)
 	if ( not player.bDetect ) return ;
 
 	if ( not IsPlayerAlive(player.index) or IsClientObserver(player.index) ) return ;
+
+	float screenx,
+		screeny,
+		vecGrenDelta[3],
+		vecStickyDelta[3]
+	;
+
+	int iEntity = -1,
+		refentity,
+		thrower //make variables OUTSIDE loop
+	;
 
 	if (DetectGrenades.BoolValue)
 	{
