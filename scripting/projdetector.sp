@@ -96,8 +96,8 @@ public void IndicatorThink (int client)
 				continue;
 			}
 
-			thrower = GetThrower(EntRefToEntIndex(refentity));
-			if ( GetClientTeam(thrower) == GetClientTeam(client) and !DetectFriendly.BoolValue ) {
+			thrower = GetThrower(iEntity);
+			if ( thrower != -1 and GetClientTeam(thrower) == GetClientTeam(client) and !DetectFriendly.BoolValue ) {
 				continue;
 			}
 			vecGrenDelta = GetDeltaVector(client, refentity);
@@ -114,8 +114,8 @@ public void IndicatorThink (int client)
 			if ( GetDistFromProj(client, refentity) > DetectStickyRadius.FloatValue )
 				continue;
 
-			thrower = GetThrower(EntRefToEntIndex(refentity));
-			if ( GetClientTeam(thrower) == GetClientTeam(client) and !DetectFriendly.BoolValue )
+			thrower = GetThrower(iEntity);
+			if ( thrower != -1 and GetClientTeam(thrower) == GetClientTeam(client) and !DetectFriendly.BoolValue )
 				continue;
 
 			vecStickyDelta = GetDeltaVector(client, refentity);
